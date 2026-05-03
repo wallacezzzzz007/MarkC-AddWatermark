@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="816" height="1456" viewBox="0 0 816 1456">
+  <defs>
+    <linearGradient id="water" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#72d8cf"/>
+      <stop offset="0.55" stop-color="#a7efe4"/>
+      <stop offset="1" stop-color="#d7fff8"/>
+    </linearGradient>
+    <radialGradient id="apple" cx="45%" cy="35%" r="65%">
+      <stop offset="0" stop-color="#e8ff9a"/>
+      <stop offset="0.45" stop-color="#b8dc55"/>
+      <stop offset="1" stop-color="#6a9b23"/>
+    </radialGradient>
+  </defs>
+  <rect width="816" height="1456" fill="url(#water)"/>
+  <g fill="#fff" opacity=".46">
+    <circle cx="122" cy="315" r="6"/>
+    <circle cx="677" cy="246" r="8"/>
+    <circle cx="704" cy="1032" r="7"/>
+    <circle cx="255" cy="1175" r="5"/>
+    <circle cx="618" cy="834" r="4"/>
+    <circle cx="182" cy="728" r="4"/>
+  </g>
+  <g opacity=".28" fill="none" stroke="#fff" stroke-width="12">
+    <path d="M52 825c104-110 198-105 290 14s202 123 331 12"/>
+    <path d="M118 1005c112-72 218-68 320 12s194 80 280 0"/>
+    <path d="M90 1232c122-84 244-82 366 7s226 94 316 14"/>
+  </g>
+  <ellipse cx="408" cy="716" rx="160" ry="176" fill="url(#apple)"/>
+  <path d="M426 542c18-58 54-87 106-87" fill="none" stroke="#6d561f" stroke-width="12" stroke-linecap="round"/>
+  <g fill="#fff" opacity=".42">
+    <circle cx="344" cy="633" r="11"/>
+    <circle cx="506" cy="708" r="8"/>
+    <circle cx="438" cy="585" r="5"/>
+    <circle cx="305" cy="744" r="6"/>
+  </g>
+</svg>
+
