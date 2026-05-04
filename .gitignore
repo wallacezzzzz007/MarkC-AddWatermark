@@ -15,6 +15,8 @@ dist
 dist-ssr
 src-tauri/target
 src-tauri/gen/schemas
+src-tauri/icons/android/
+src-tauri/icons/ios/
 *.dmg
 *.app
 *.msi
