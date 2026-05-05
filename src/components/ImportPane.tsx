@@ -143,7 +143,7 @@ export function ImportPane({ exportResults, library }: ImportPaneProps) {
     >
       <div className="pane-header">
         <div>
-          <h1>Watermark</h1>
+          <h1>MarkC</h1>
           <p>{library.assets.length} ready</p>
         </div>
         <button

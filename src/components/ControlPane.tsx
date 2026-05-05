@@ -2,7 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { basename } from "../lib/format";
-import { exportBatch } from "../lib/ipc";
+import { cancelBatchExport, exportBatch } from "../lib/ipc";
 import type { EditorStore } from "../stores/editorStore";
 import type { ExportStore } from "../stores/exportStore";
 import type { LibraryStore } from "../stores/libraryStore";
@@ -85,8 +85,20 @@ export function ControlPane({
     return previewOutputName(asset, exportStore.outputRules.namingRule, exportStore.outputRules.customPrefix);
   }, [asset, exportStore.outputRules.customPrefix, exportStore.outputRules.namingRule]);
   const trimmedText = watermark.text.trim();
+  const imageHeight = asset?.height ?? 1456;
+  const sizePercent =
+    imageHeight > 0 ? (watermark.fontSizePx / imageHeight) * 100 : watermark.fontSizePercent;
+  const minFontPx = 8;
+  const maxFontPx = Math.max(24, Math.round(imageHeight * 0.16));
   const canExport =
     realAssets.length > 0 && trimmedText.length > 0 && !exportStore.isExporting;
+  const changeSignature = JSON.stringify({
+    assetId: asset?.id ?? null,
+    assetCount: realAssets.length,
+    outputRules: exportStore.outputRules,
+    templateName,
+    watermark,
+  });
 
   useEffect(() => {
     if (exportStore.outputRules.customPrefix !== watermark.text) {
@@ -95,15 +107,25 @@ export function ControlPane({
   }, [exportStore, watermark.text]);
 
   useEffect(() => {
+    setExportNotice(null);
+  }, [changeSignature]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+
     let isMounted = true;
     let unlisten: (() => void) | undefined;
 
     listen<{ latest?: BatchExportItemResult }>("batch_export_progress", (event) => {
       if (!isMounted || !event.payload.latest) return;
       exportStore.recordProgressResult(event.payload.latest);
-    }).then((cleanup) => {
-      unlisten = cleanup;
-    });
+    })
+      .then((cleanup) => {
+        unlisten = cleanup;
+      })
+      .catch(() => {
+        // The browser-only preview has no Tauri event bridge.
+      });
 
     return () => {
       isMounted = false;
@@ -169,6 +191,20 @@ export function ControlPane({
     templateStore.selectTemplate(null);
   }
 
+  function handleRenameTemplate() {
+    if (!templateStore.selectedTemplateId) return;
+    templateStore.renameTemplate(templateStore.selectedTemplateId, templateName);
+  }
+
+  function handleSetDefaultTemplate() {
+    templateStore.setDefaultTemplate(templateStore.selectedTemplateId);
+  }
+
+  async function handleCancelExport() {
+    await cancelBatchExport();
+    exportStore.markCancelling();
+  }
+
   return (
     <aside className="pane control-pane" aria-label="Watermark controls">
       <div className="pane-header">
@@ -205,11 +241,30 @@ export function ControlPane({
           </button>
           <button
             type="button"
+            onClick={handleRenameTemplate}
+            disabled={!templateStore.selectedTemplateId}
+          >
+            Rename
+          </button>
+          <button
+            type="button"
+            onClick={handleSetDefaultTemplate}
+            disabled={!templateStore.selectedTemplateId}
+          >
+            Set default
+          </button>
+          <button
+            type="button"
             onClick={handleDeleteTemplate}
             disabled={!templateStore.selectedTemplateId}
           >
             Delete
           </button>
+        </div>
+        <div className="collision-note">
+          Default:{" "}
+          {templateStore.templates.find((item) => item.id === templateStore.defaultTemplateId)
+            ?.name ?? "None"}
         </div>
       </InspectorSection>
 
@@ -219,7 +274,7 @@ export function ControlPane({
           <input
             value={watermark.text}
             onChange={(event) => editor.setText(event.currentTarget.value)}
-            placeholder="@bntxx_"
+            placeholder="@test"
           />
         </label>
       </InspectorSection>
@@ -240,18 +295,35 @@ export function ControlPane({
         </label>
         <label>
           Size
-          <span className="range-row">
+          <span
+            className="range-row size-row"
+            title={`${sizePercent.toFixed(1)}% of image height`}
+          >
             <input
-              max="8"
-              min="1.5"
-              step="0.1"
+              max={maxFontPx}
+              min={minFontPx}
+              step="1"
               type="range"
-              value={watermark.fontSizePercent}
+              value={watermark.fontSizePx}
               onChange={(event) =>
-                editor.setFontSizePercent(Number(event.currentTarget.value))
+                editor.setFontSizePx(Number(event.currentTarget.value), imageHeight)
               }
             />
-            <strong>{watermark.fontSizePercent.toFixed(1)}%</strong>
+            <span className="number-with-unit">
+              <input
+                aria-label="Watermark size in pixels"
+                inputMode="numeric"
+                max={maxFontPx}
+                min={minFontPx}
+                step="1"
+                type="number"
+                value={watermark.fontSizePx}
+                onChange={(event) =>
+                  editor.setFontSizePx(Number(event.currentTarget.value), imageHeight)
+                }
+              />
+              <strong>px</strong>
+            </span>
           </span>
         </label>
         <label>
@@ -268,6 +340,47 @@ export function ControlPane({
             <strong>{Math.round(watermark.opacity * 100)}%</strong>
           </span>
         </label>
+        <label>
+          Rotation
+          <span className="range-row size-row">
+            <input
+              max="180"
+              min="-180"
+              step="1"
+              type="range"
+              value={watermark.rotationDegrees}
+              onChange={(event) =>
+                editor.setRotationDegrees(Number(event.currentTarget.value))
+              }
+            />
+            <span className="number-with-unit">
+              <input
+                aria-label="Watermark rotation in degrees"
+                max="180"
+                min="-180"
+                step="1"
+                type="number"
+                value={watermark.rotationDegrees}
+                onChange={(event) =>
+                  editor.setRotationDegrees(Number(event.currentTarget.value))
+                }
+              />
+              <strong>deg</strong>
+            </span>
+          </span>
+        </label>
+        <div className="rotation-presets">
+          {[-45, 0, 45, 90].map((degrees) => (
+            <button
+              key={degrees}
+              type="button"
+              className={watermark.rotationDegrees === degrees ? "active" : ""}
+              onClick={() => editor.setRotationDegrees(degrees)}
+            >
+              {degrees}°
+            </button>
+          ))}
+        </div>
         <label>
           Color
           <span className="color-row">
@@ -295,8 +408,35 @@ export function ControlPane({
           ))}
         </div>
         {watermark.anchor === "custom" && <div className="custom-position-label">Custom</div>}
-        <div className="coordinate-readout">
-          X {(watermark.x * 100).toFixed(1)} · Y {(watermark.y * 100).toFixed(1)}
+        <div className="coordinate-inputs">
+          <label>
+            X %
+            <input
+              type="number"
+              step="0.1"
+              value={(watermark.x * 100).toFixed(1)}
+              onChange={(event) =>
+                editor.setPosition(
+                  Number(event.currentTarget.value) / 100,
+                  watermark.y,
+                )
+              }
+            />
+          </label>
+          <label>
+            Y %
+            <input
+              type="number"
+              step="0.1"
+              value={(watermark.y * 100).toFixed(1)}
+              onChange={(event) =>
+                editor.setPosition(
+                  watermark.x,
+                  Number(event.currentTarget.value) / 100,
+                )
+              }
+            />
+          </label>
         </div>
       </InspectorSection>
 
@@ -407,10 +547,17 @@ export function ControlPane({
           <div className="export-spinner" />
           <strong>Exporting images...</strong>
           <span>{exportStore.statusMessage}</span>
+          <button type="button" onClick={handleCancelExport}>
+            Cancel
+          </button>
         </div>
       )}
     </aside>
   );
+}
+
+function isTauriRuntime(): boolean {
+  return "__TAURI_INTERNALS__" in window;
 }
 
 function metadataCopy(policy: MetadataPolicy): string {

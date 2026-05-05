@@ -8,16 +8,19 @@ desktop utility while keeping the editing interface fast and familiar.
 
 - Import one image, multiple images, or a whole folder.
 - Drag images or folders directly into the app.
-- Preview the selected image before export.
-- Add a text watermark and tune its text, font, size, opacity, and color.
+- Preview the selected image before export with fit, 100%, and before/after controls.
+- Add a text watermark and tune its text, font, pixel size, opacity, rotation, and color.
 - Use precise placement presets: top, center, bottom combined with left, center,
   and right.
 - Drag the watermark freely, including partially outside the image edge. Export
   clips the watermark naturally at the image boundary.
+- Use centerline guides and X/Y numeric controls for precise placement.
 - Save reusable templates. Templates include watermark text, style, position,
-  export naming, and metadata settings.
+  rotation, export naming, and metadata settings.
+- Rename, duplicate, delete, and set a default template.
 - Keep template names unique automatically with `-1`, `-2`, and later suffixes.
 - Batch export all imported images with the same watermark settings.
+- Cancel a batch export between images.
 - Choose an output folder, or use the default `Watermark export` folder beside
   the source images.
 - Choose output naming rules, including original name plus watermark suffix,

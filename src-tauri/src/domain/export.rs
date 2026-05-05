@@ -19,7 +19,11 @@ pub struct WatermarkExport {
     pub font_family: String,
     pub color: String,
     pub opacity: f32,
+    #[serde(default)]
+    pub font_size_px: f32,
     pub font_size_percent: f32,
+    #[serde(default)]
+    pub rotation_degrees: f32,
     pub x: f32,
     pub y: f32,
     pub anchor: WatermarkAnchor,

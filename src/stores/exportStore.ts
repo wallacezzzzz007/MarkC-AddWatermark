@@ -18,6 +18,7 @@ export type ExportStore = {
   startExport: (total: number) => void;
   finishExport: (results: BatchExportItemResult[]) => void;
   failExport: (message: string) => void;
+  markCancelling: () => void;
   recordProgressResult: (result: BatchExportItemResult) => void;
   clearResults: () => void;
 };
@@ -29,9 +30,17 @@ const DEFAULT_OUTPUT_RULES: OutputRules = {
   metadataPolicy: "clear-description",
   description: "",
 };
+const STORAGE_KEY = "watermark.outputRules.v1";
 
 export function useExportStore(): ExportStore {
-  const [outputRules, setOutputRules] = useState<OutputRules>(DEFAULT_OUTPUT_RULES);
+  const [outputRules, setOutputRules] = useState<OutputRules>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? { ...DEFAULT_OUTPUT_RULES, ...JSON.parse(raw) } : DEFAULT_OUTPUT_RULES;
+    } catch {
+      return DEFAULT_OUTPUT_RULES;
+    }
+  });
   const [isExporting, setExporting] = useState(false);
   const [results, setResults] = useState<BatchExportItemResult[]>([]);
   const [statusMessage, setStatusMessage] = useState("Ready to export imported images");
@@ -50,16 +59,16 @@ export function useExportStore(): ExportStore {
     failed,
     statusMessage,
     setOutputFolder: (outputFolder) =>
-      setOutputRules((current) => ({ ...current, outputFolder })),
+      setOutputRules((current) => persistOutputRules({ ...current, outputFolder })),
     setNamingRule: (namingRule) =>
-      setOutputRules((current) => ({ ...current, namingRule })),
+      setOutputRules((current) => persistOutputRules({ ...current, namingRule })),
     setCustomPrefix: (customPrefix) =>
-      setOutputRules((current) => ({ ...current, customPrefix })),
+      setOutputRules((current) => persistOutputRules({ ...current, customPrefix })),
     setMetadataPolicy: (metadataPolicy) =>
-      setOutputRules((current) => ({ ...current, metadataPolicy })),
+      setOutputRules((current) => persistOutputRules({ ...current, metadataPolicy })),
     setDescription: (description) =>
-      setOutputRules((current) => ({ ...current, description })),
-    applyOutputRules: (outputRules) => setOutputRules(outputRules),
+      setOutputRules((current) => persistOutputRules({ ...current, description })),
+    applyOutputRules: (outputRules) => setOutputRules(persistOutputRules(outputRules)),
     startExport: (total) => {
       setExporting(true);
       setResults([]);
@@ -75,6 +84,9 @@ export function useExportStore(): ExportStore {
     failExport: (message) => {
       setExporting(false);
       setStatusMessage(message);
+    },
+    markCancelling: () => {
+      setStatusMessage("Cancelling after the current image...");
     },
     recordProgressResult: (result) => {
       setResults((current) => {
@@ -92,4 +104,9 @@ export function useExportStore(): ExportStore {
       setStatusMessage("Ready to export imported images");
     },
   };
+}
+
+function persistOutputRules(outputRules: OutputRules): OutputRules {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(outputRules));
+  return outputRules;
 }

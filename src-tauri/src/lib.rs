@@ -10,6 +10,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::export::export_selected_image,
             commands::export::export_batch,
+            commands::export::cancel_batch_export,
             commands::import::import_files,
             commands::import::import_folder,
             commands::import::get_image_info,

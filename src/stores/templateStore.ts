@@ -12,16 +12,20 @@ export type WatermarkTemplate = {
 export type TemplateStore = {
   templates: WatermarkTemplate[];
   selectedTemplateId: string | null;
+  defaultTemplateId: string | null;
   saveTemplate: (
     name: string,
     watermark: WatermarkDraft,
     outputRules: OutputRules,
   ) => WatermarkTemplate;
   deleteTemplate: (id: string) => void;
+  renameTemplate: (id: string, name: string) => void;
+  setDefaultTemplate: (id: string | null) => void;
   selectTemplate: (id: string | null) => void;
 };
 
 const STORAGE_KEY = "watermark.templates.v1";
+const DEFAULT_TEMPLATE_KEY = "watermark.defaultTemplateId.v1";
 
 export function useTemplateStore(): TemplateStore {
   const [templates, setTemplates] = useState<WatermarkTemplate[]>(() => {
@@ -33,10 +37,25 @@ export function useTemplateStore(): TemplateStore {
     }
   });
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [defaultTemplateId, setDefaultTemplateId] = useState<string | null>(() =>
+    localStorage.getItem(DEFAULT_TEMPLATE_KEY),
+  );
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
   }, [templates]);
+
+  useEffect(() => {
+    if (defaultTemplateId && !templates.some((template) => template.id === defaultTemplateId)) {
+      setDefaultTemplateId(null);
+      return;
+    }
+    if (defaultTemplateId) {
+      localStorage.setItem(DEFAULT_TEMPLATE_KEY, defaultTemplateId);
+    } else {
+      localStorage.removeItem(DEFAULT_TEMPLATE_KEY);
+    }
+  }, [defaultTemplateId, templates]);
 
   function saveTemplate(
     name: string,
@@ -61,9 +80,33 @@ export function useTemplateStore(): TemplateStore {
   function deleteTemplate(id: string) {
     setTemplates((current) => current.filter((template) => template.id !== id));
     setSelectedTemplateId((current) => (current === id ? null : current));
+    setDefaultTemplateId((current) => (current === id ? null : current));
   }
 
-  return { templates, selectedTemplateId, saveTemplate, deleteTemplate, selectTemplate: setSelectedTemplateId };
+  function renameTemplate(id: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setTemplates((current) => {
+      const existingNames = current
+        .filter((template) => template.id !== id)
+        .map((template) => template.name);
+      const nextName = uniqueTemplateName(trimmed, existingNames);
+      return current.map((template) =>
+        template.id === id ? { ...template, name: nextName } : template,
+      );
+    });
+  }
+
+  return {
+    templates,
+    selectedTemplateId,
+    defaultTemplateId,
+    saveTemplate,
+    deleteTemplate,
+    renameTemplate,
+    setDefaultTemplate: setDefaultTemplateId,
+    selectTemplate: setSelectedTemplateId,
+  };
 }
 
 function uniqueTemplateName(name: string, existingNames: string[]): string {
@@ -92,6 +135,8 @@ function migrateTemplates(value: unknown): WatermarkTemplate[] {
           watermark: {
             ...next.watermark,
             fontFamily: next.watermark.fontFamily ?? "Arial",
+            fontSizePx: next.watermark.fontSizePx ?? Math.round(next.watermark.fontSizePercent * 14.56),
+            rotationDegrees: next.watermark.rotationDegrees ?? 0,
           },
         };
       }
@@ -125,7 +170,9 @@ function migrateTemplates(value: unknown): WatermarkTemplate[] {
           fontFamily: migratedFontFamily,
           color,
           opacity,
+          fontSizePx: Math.round(fontSizePercent * 14.56),
           fontSizePercent,
+          rotationDegrees: 0,
           x,
           y,
           anchor: anchor as WatermarkDraft["anchor"],

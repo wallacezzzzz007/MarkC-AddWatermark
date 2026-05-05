@@ -15,7 +15,9 @@ export type WatermarkDraft = {
   fontFamily: string;
   color: string;
   opacity: number;
+  fontSizePx: number;
   fontSizePercent: number;
+  rotationDegrees: number;
   x: number;
   y: number;
   anchor: WatermarkAnchor;

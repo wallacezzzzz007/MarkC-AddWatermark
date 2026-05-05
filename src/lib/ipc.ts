@@ -43,3 +43,7 @@ export function exportSelectedImage(
 export function exportBatch(request: BatchExportRequest): Promise<BatchExportResult> {
   return invoke<BatchExportResult>("export_batch", { request });
 }
+
+export function cancelBatchExport(): Promise<void> {
+  return invoke<void>("cancel_batch_export");
+}

@@ -15,11 +15,13 @@ const ANCHOR_POSITIONS: Record<WatermarkAnchor, Pick<WatermarkDraft, "x" | "y">>
 };
 
 const DEFAULT_WATERMARK: WatermarkDraft = {
-  text: "@bntxx_",
+  text: "@test",
   fontFamily: "Arial",
   color: "#ffffff",
   opacity: 0.82,
+  fontSizePx: 47,
   fontSizePercent: 3.2,
+  rotationDegrees: 0,
   x: ANCHOR_POSITIONS["bottom-center"].x,
   y: ANCHOR_POSITIONS["bottom-center"].y,
   anchor: "bottom-center",
@@ -31,7 +33,9 @@ export type EditorStore = {
   setFontFamily: (fontFamily: string) => void;
   setColor: (color: string) => void;
   setOpacity: (opacity: number) => void;
+  setFontSizePx: (fontSizePx: number, imageHeight?: number) => void;
   setFontSizePercent: (fontSizePercent: number) => void;
+  setRotationDegrees: (rotationDegrees: number) => void;
   setPosition: (x: number, y: number) => void;
   setAnchor: (anchor: WatermarkAnchor) => void;
   applyWatermark: (watermark: WatermarkDraft) => void;
@@ -49,10 +53,27 @@ export function useEditorStore(): EditorStore {
     setColor: (color) => setWatermark((current) => ({ ...current, color })),
     setOpacity: (opacity) =>
       setWatermark((current) => ({ ...current, opacity: clamp(opacity, 0, 1) })),
+    setFontSizePx: (fontSizePx, imageHeight) =>
+      setWatermark((current) => {
+        const nextPx = Math.round(clamp(fontSizePx, 8, 512));
+        return {
+          ...current,
+          fontSizePx: nextPx,
+          fontSizePercent:
+            imageHeight && imageHeight > 0
+              ? clamp((nextPx / imageHeight) * 100, 0.1, 50)
+              : current.fontSizePercent,
+        };
+      }),
     setFontSizePercent: (fontSizePercent) =>
       setWatermark((current) => ({
         ...current,
         fontSizePercent: clamp(fontSizePercent, 1, 10),
+      })),
+    setRotationDegrees: (rotationDegrees) =>
+      setWatermark((current) => ({
+        ...current,
+        rotationDegrees: clamp(rotationDegrees, -180, 180),
       })),
     setPosition: (x, y) =>
       setWatermark((current) => ({

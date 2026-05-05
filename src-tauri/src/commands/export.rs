@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::domain::export::{
     BatchExportProgressEvent, BatchExportRequest, BatchExportResult, ExportResult,
     ExportSelectedRequest,
@@ -5,9 +7,16 @@ use crate::domain::export::{
 use crate::processing::exporter;
 use tauri::Emitter;
 
+static CANCEL_BATCH_EXPORT: AtomicBool = AtomicBool::new(false);
+
 #[tauri::command]
 pub fn export_selected_image(request: ExportSelectedRequest) -> Result<ExportResult, String> {
     exporter::export_selected_image(&request)
+}
+
+#[tauri::command]
+pub fn cancel_batch_export() {
+    CANCEL_BATCH_EXPORT.store(true, Ordering::SeqCst);
 }
 
 #[tauri::command]
@@ -22,10 +31,14 @@ pub fn export_batch(
         return Err("Watermark text is required before export".to_string());
     }
 
+    CANCEL_BATCH_EXPORT.store(false, Ordering::SeqCst);
     let total = request.source_paths.len();
     let mut results = Vec::with_capacity(total);
 
     for (offset, source_path) in request.source_paths.iter().enumerate() {
+        if CANCEL_BATCH_EXPORT.load(Ordering::SeqCst) {
+            break;
+        }
         let item_request = ExportSelectedRequest {
             source_path: source_path.clone(),
             watermark: request.watermark.clone(),
@@ -63,6 +76,19 @@ pub fn export_batch(
         );
     }
 
+    let cancelled = CANCEL_BATCH_EXPORT.swap(false, Ordering::SeqCst);
+    if cancelled && results.len() < total {
+        for source_path in request.source_paths.iter().skip(results.len()) {
+            results.push(crate::domain::export::BatchExportItemResult {
+                source_path: source_path.clone(),
+                output_path: None,
+                width: None,
+                height: None,
+                success: false,
+                error: Some("Export cancelled".to_string()),
+            });
+        }
+    }
     let completed = results.iter().filter(|result| result.success).count();
     let failed = results.len().saturating_sub(completed);
 

@@ -47,5 +47,6 @@ Thumbs.db
 .gstack/
 
 # Local planning docs
+docs/
 team_guide.md
 ROADMAP.md

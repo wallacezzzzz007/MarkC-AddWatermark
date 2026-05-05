@@ -1,6 +1,6 @@
 [package]
 name = "markc"
-version = "0.1.1"
+version = "1.0.0"
 description = "Batch watermarking desktop app"
 authors = ["wallacezuo"]
 license = "MIT"
