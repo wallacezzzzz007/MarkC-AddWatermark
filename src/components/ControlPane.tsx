@@ -77,6 +77,9 @@ export function ControlPane({
   const { watermark } = editor;
   const [templateName, setTemplateName] = useState("Default watermark");
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const visibleWatermarks = editor.watermarks.filter(
+    (item) => item.visible && item.text.trim().length > 0,
+  );
   const realAssets = library.assets.filter((item) => !item.previewSrc);
   const asset = library.selectedAsset?.previewSrc
     ? realAssets[0] ?? library.selectedAsset
@@ -84,27 +87,27 @@ export function ControlPane({
   const outputName = useMemo(() => {
     return previewOutputName(asset, exportStore.outputRules.namingRule, exportStore.outputRules.customPrefix);
   }, [asset, exportStore.outputRules.customPrefix, exportStore.outputRules.namingRule]);
-  const trimmedText = watermark.text.trim();
   const imageHeight = asset?.height ?? 1456;
   const sizePercent =
     imageHeight > 0 ? (watermark.fontSizePx / imageHeight) * 100 : watermark.fontSizePercent;
   const minFontPx = 8;
   const maxFontPx = Math.max(24, Math.round(imageHeight * 0.16));
   const canExport =
-    realAssets.length > 0 && trimmedText.length > 0 && !exportStore.isExporting;
+    realAssets.length > 0 && visibleWatermarks.length > 0 && !exportStore.isExporting;
   const changeSignature = JSON.stringify({
     assetId: asset?.id ?? null,
     assetCount: realAssets.length,
     outputRules: exportStore.outputRules,
     templateName,
-    watermark,
+    watermarks: editor.watermarks,
   });
 
   useEffect(() => {
+    if (editor.watermarks.length !== 1) return;
     if (exportStore.outputRules.customPrefix !== watermark.text) {
       exportStore.setCustomPrefix(watermark.text);
     }
-  }, [exportStore, watermark.text]);
+  }, [editor.watermarks.length, exportStore, watermark.text]);
 
   useEffect(() => {
     setExportNotice(null);
@@ -151,9 +154,12 @@ export function ControlPane({
 
     try {
       const result = await exportBatch({
-        outputRules: { ...exportStore.outputRules, customPrefix: watermark.text },
+        outputRules:
+          editor.watermarks.length === 1
+            ? { ...exportStore.outputRules, customPrefix: watermark.text }
+            : exportStore.outputRules,
         sourcePaths: realAssets.map((item) => item.path),
-        watermark,
+        watermarks: editor.watermarks,
       });
       exportStore.finishExport(result.results);
       setExportNotice(
@@ -170,7 +176,7 @@ export function ControlPane({
     templateStore.selectTemplate(id || null);
     const template = templateStore.templates.find((item) => item.id === id);
     if (template) {
-      editor.applyWatermark(template.watermark);
+      editor.applyWatermarks(template.watermarks);
       exportStore.applyOutputRules(template.outputRules);
       setTemplateName(template.name);
     }
@@ -179,8 +185,10 @@ export function ControlPane({
   function handleSaveTemplate() {
     const template = templateStore.saveTemplate(
       templateName,
-      watermark,
-      { ...exportStore.outputRules, customPrefix: watermark.text },
+      editor.watermarks,
+      editor.watermarks.length === 1
+        ? { ...exportStore.outputRules, customPrefix: watermark.text }
+        : exportStore.outputRules,
     );
     setTemplateName(template.name);
   }
@@ -268,7 +276,61 @@ export function ControlPane({
         </div>
       </InspectorSection>
 
-      <InspectorSection title="Watermark">
+      <InspectorSection title="Watermarks">
+        <div className="watermark-list">
+          {editor.watermarks.map((layer, index) => (
+            <button
+              className={`watermark-layer-row ${
+                layer.id === editor.selectedWatermarkId ? "active" : ""
+              }`}
+              key={layer.id}
+              type="button"
+              onClick={() => editor.selectWatermark(layer.id)}
+            >
+              <span className="layer-index">{index + 1}</span>
+              <span className="layer-main">
+                <strong>{layer.name}</strong>
+                <span>{layer.text.trim() || "Empty text"}</span>
+              </span>
+              <span className={`layer-state ${layer.visible ? "visible" : ""}`}>
+                {layer.visible ? "Shown" : "Hidden"}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="template-actions">
+          <button type="button" onClick={editor.addTextWatermark}>
+            Add text
+          </button>
+          <button type="button" onClick={editor.duplicateSelectedWatermark}>
+            Copy
+          </button>
+          <button
+            type="button"
+            onClick={() => editor.toggleWatermarkVisibility(editor.selectedWatermarkId)}
+          >
+            {watermark.visible ? "Hide" : "Show"}
+          </button>
+          <button
+            type="button"
+            onClick={() => editor.removeWatermark(editor.selectedWatermarkId)}
+            disabled={editor.watermarks.length <= 1}
+          >
+            Delete
+          </button>
+        </div>
+      </InspectorSection>
+
+      <InspectorSection title="Selected watermark">
+        <label>
+          Layer name
+          <input
+            value={watermark.name}
+            onChange={(event) =>
+              editor.setLayerName(watermark.id, event.currentTarget.value)
+            }
+          />
+        </label>
         <label>
           Text
           <input
@@ -472,10 +534,19 @@ export function ControlPane({
         {exportStore.outputRules.namingRule === "custom-prefix-index" && (
           <label>
             Prefix
-            <input
-              value={exportStore.outputRules.customPrefix}
-              readOnly
-            />
+            <span className="folder-row">
+              <input
+                value={exportStore.outputRules.customPrefix}
+                onChange={(event) => exportStore.setCustomPrefix(event.currentTarget.value)}
+              />
+              <button
+                type="button"
+                onClick={() => exportStore.setCustomPrefix(watermark.text)}
+                disabled={exportStore.isExporting}
+              >
+                Use selected
+              </button>
+            </span>
           </label>
         )}
         <label>

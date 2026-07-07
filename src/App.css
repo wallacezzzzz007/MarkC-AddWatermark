@@ -523,6 +523,8 @@ button {
   position: absolute;
   z-index: 4;
   contain: layout paint style;
+  padding: 0;
+  border: 0;
   border-radius: 6px;
   color: #ffffff;
   background: transparent;
@@ -537,8 +539,13 @@ button {
   user-select: none;
   will-change: left, top, transform;
   white-space: nowrap;
-  pointer-events: none;
+  pointer-events: auto;
   -webkit-font-smoothing: antialiased;
+}
+
+.watermark-live-overlay.selected {
+  outline: 1px dashed rgba(31, 111, 235, 0.75);
+  outline-offset: 4px;
 }
 
 .alignment-guide {
@@ -709,6 +716,69 @@ button {
 
 .template-actions button:disabled {
   opacity: 0.45;
+}
+
+.watermark-list {
+  display: grid;
+  gap: 8px;
+}
+
+.watermark-layer-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #d7dfe7;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #202832;
+  text-align: left;
+}
+
+.watermark-layer-row.active {
+  border-color: #0b84ff;
+  background: #eaf3ff;
+}
+
+.layer-index {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: #e9f6ff;
+  color: #145ca8;
+  font-weight: 800;
+}
+
+.layer-main {
+  min-width: 0;
+}
+
+.layer-main strong,
+.layer-main span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-main span {
+  margin-top: 2px;
+  color: #697481;
+  font-size: 13px;
+}
+
+.layer-state {
+  color: #697481;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.layer-state.visible {
+  color: #0f9f6e;
 }
 
 .metadata-buttons button.active {

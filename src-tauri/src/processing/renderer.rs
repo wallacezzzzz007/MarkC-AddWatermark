@@ -964,6 +964,7 @@ mod tests {
 
     fn watermark() -> WatermarkExport {
         WatermarkExport {
+            visible: true,
             text: "@bntxx_".to_string(),
             font_family: "Arial".to_string(),
             color: "#ffffff".to_string(),

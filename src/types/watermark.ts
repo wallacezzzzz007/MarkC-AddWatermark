@@ -22,3 +22,9 @@ export type WatermarkDraft = {
   y: number;
   anchor: WatermarkAnchor;
 };
+
+export type WatermarkLayer = WatermarkDraft & {
+  id: string;
+  name: string;
+  visible: boolean;
+};

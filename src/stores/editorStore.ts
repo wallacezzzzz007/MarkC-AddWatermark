@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { WatermarkAnchor, WatermarkDraft } from "../types/watermark";
+import { useMemo, useState } from "react";
+import type { WatermarkAnchor, WatermarkDraft, WatermarkLayer } from "../types/watermark";
 
 const ANCHOR_POSITIONS: Record<WatermarkAnchor, Pick<WatermarkDraft, "x" | "y">> = {
   "top-left": { x: 0, y: 0 },
@@ -28,7 +28,15 @@ const DEFAULT_WATERMARK: WatermarkDraft = {
 };
 
 export type EditorStore = {
-  watermark: WatermarkDraft;
+  watermark: WatermarkLayer;
+  watermarks: WatermarkLayer[];
+  selectedWatermarkId: string;
+  addTextWatermark: () => void;
+  duplicateSelectedWatermark: () => void;
+  removeWatermark: (id: string) => void;
+  selectWatermark: (id: string) => void;
+  setLayerName: (id: string, name: string) => void;
+  toggleWatermarkVisibility: (id: string) => void;
   setText: (text: string) => void;
   setFontFamily: (fontFamily: string) => void;
   setColor: (color: string) => void;
@@ -37,24 +45,100 @@ export type EditorStore = {
   setFontSizePercent: (fontSizePercent: number) => void;
   setRotationDegrees: (rotationDegrees: number) => void;
   setPosition: (x: number, y: number) => void;
+  setWatermarkPosition: (id: string, x: number, y: number) => void;
   setAnchor: (anchor: WatermarkAnchor) => void;
+  applyWatermarks: (watermarks: WatermarkLayer[]) => void;
   applyWatermark: (watermark: WatermarkDraft) => void;
   resetWatermark: () => void;
 };
 
 export function useEditorStore(): EditorStore {
-  const [watermark, setWatermark] = useState<WatermarkDraft>(DEFAULT_WATERMARK);
+  const [watermarks, setWatermarks] = useState<WatermarkLayer[]>(() => [
+    createWatermarkLayer(DEFAULT_WATERMARK, 1),
+  ]);
+  const [selectedWatermarkId, setSelectedWatermarkId] = useState(() => watermarks[0].id);
+  const watermark = useMemo(
+    () => watermarks.find((item) => item.id === selectedWatermarkId) ?? watermarks[0],
+    [selectedWatermarkId, watermarks],
+  );
+
+  function updateSelected(update: (current: WatermarkLayer) => WatermarkLayer) {
+    setWatermarks((current) =>
+      current.map((item) => (item.id === selectedWatermarkId ? update(item) : item)),
+    );
+  }
+
+  function addTextWatermark() {
+    const layer = createWatermarkLayer(
+      {
+        ...DEFAULT_WATERMARK,
+        text: `@test${watermarks.length + 1}`,
+        x: 0.5,
+        y: 0.5,
+        anchor: "center",
+      },
+      watermarks.length + 1,
+    );
+    setWatermarks((current) => [...current, layer]);
+    setSelectedWatermarkId(layer.id);
+  }
+
+  function duplicateSelectedWatermark() {
+    const source = watermark;
+    const layer = {
+      ...source,
+      id: crypto.randomUUID(),
+      name: uniqueLayerName(`${source.name} copy`, watermarks.map((item) => item.name)),
+      x: source.x + 0.03,
+      y: source.y + 0.03,
+    };
+    setWatermarks((current) => [...current, layer]);
+    setSelectedWatermarkId(layer.id);
+  }
+
+  function removeWatermark(id: string) {
+    if (watermarks.length <= 1) return;
+    const next = watermarks.filter((item) => item.id !== id);
+    setWatermarks(next);
+    if (id === selectedWatermarkId) {
+      setSelectedWatermarkId(next[0].id);
+    }
+  }
+
+  function applyWatermarks(nextWatermarks: WatermarkLayer[]) {
+    const normalized = normalizeLayers(nextWatermarks);
+    setWatermarks(normalized);
+    setSelectedWatermarkId(normalized[0].id);
+  }
 
   return {
     watermark,
-    setText: (text) => setWatermark((current) => ({ ...current, text })),
+    watermarks,
+    selectedWatermarkId,
+    addTextWatermark,
+    duplicateSelectedWatermark,
+    removeWatermark,
+    selectWatermark: setSelectedWatermarkId,
+    setLayerName: (id, name) =>
+      setWatermarks((current) =>
+        current.map((item) =>
+          item.id === id ? { ...item, name: name.trim() || item.name } : item,
+        ),
+      ),
+    toggleWatermarkVisibility: (id) =>
+      setWatermarks((current) =>
+        current.map((item) =>
+          item.id === id ? { ...item, visible: !item.visible } : item,
+        ),
+      ),
+    setText: (text) => updateSelected((current) => ({ ...current, text })),
     setFontFamily: (fontFamily) =>
-      setWatermark((current) => ({ ...current, fontFamily })),
-    setColor: (color) => setWatermark((current) => ({ ...current, color })),
+      updateSelected((current) => ({ ...current, fontFamily })),
+    setColor: (color) => updateSelected((current) => ({ ...current, color })),
     setOpacity: (opacity) =>
-      setWatermark((current) => ({ ...current, opacity: clamp(opacity, 0, 1) })),
+      updateSelected((current) => ({ ...current, opacity: clamp(opacity, 0, 1) })),
     setFontSizePx: (fontSizePx, imageHeight) =>
-      setWatermark((current) => {
+      updateSelected((current) => {
         const nextPx = Math.round(clamp(fontSizePx, 8, 512));
         return {
           ...current,
@@ -66,31 +150,81 @@ export function useEditorStore(): EditorStore {
         };
       }),
     setFontSizePercent: (fontSizePercent) =>
-      setWatermark((current) => ({
+      updateSelected((current) => ({
         ...current,
         fontSizePercent: clamp(fontSizePercent, 1, 10),
       })),
     setRotationDegrees: (rotationDegrees) =>
-      setWatermark((current) => ({
+      updateSelected((current) => ({
         ...current,
         rotationDegrees: clamp(rotationDegrees, -180, 180),
       })),
     setPosition: (x, y) =>
-      setWatermark((current) => ({
+      updateSelected((current) => ({
         ...current,
         x: finitePosition(x, current.x),
         y: finitePosition(y, current.y),
         anchor: "custom",
       })),
+    setWatermarkPosition: (id, x, y) =>
+      setWatermarks((current) =>
+        current.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                x: finitePosition(x, item.x),
+                y: finitePosition(y, item.y),
+                anchor: "custom",
+              }
+            : item,
+        ),
+      ),
     setAnchor: (anchor) =>
-      setWatermark((current) => ({
+      updateSelected((current) => ({
         ...current,
         ...ANCHOR_POSITIONS[anchor],
         anchor,
       })),
-    applyWatermark: (watermark) => setWatermark(watermark),
-    resetWatermark: () => setWatermark(DEFAULT_WATERMARK),
+    applyWatermarks,
+    applyWatermark: (nextWatermark) => applyWatermarks([createWatermarkLayer(nextWatermark, 1)]),
+    resetWatermark: () => applyWatermarks([createWatermarkLayer(DEFAULT_WATERMARK, 1)]),
   };
+}
+
+function createWatermarkLayer(
+  watermark: WatermarkDraft,
+  index: number,
+  name = `Watermark ${index}`,
+): WatermarkLayer {
+  return {
+    ...watermark,
+    id: crypto.randomUUID(),
+    name,
+    visible: true,
+  };
+}
+
+function normalizeLayers(layers: WatermarkLayer[]): WatermarkLayer[] {
+  const normalized = layers.length > 0 ? layers : [createWatermarkLayer(DEFAULT_WATERMARK, 1)];
+  return normalized.map((layer, index) => ({
+    ...DEFAULT_WATERMARK,
+    ...layer,
+    id: layer.id || crypto.randomUUID(),
+    name: layer.name?.trim() || `Watermark ${index + 1}`,
+    visible: layer.visible ?? true,
+  }));
+}
+
+function uniqueLayerName(name: string, existingNames: string[]): string {
+  const existing = new Set(existingNames);
+  if (!existing.has(name)) return name;
+
+  let suffix = 1;
+  while (existing.has(`${name}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${name}-${suffix}`;
 }
 
 function clamp(value: number, min: number, max: number): number {

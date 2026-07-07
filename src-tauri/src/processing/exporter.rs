@@ -5,7 +5,9 @@ use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, ImageDecoder, ImageReader};
 
 use crate::domain::export::MetadataPolicy;
-use crate::domain::export::{ExportResult, ExportSelectedRequest, NamingRule, OutputRules};
+use crate::domain::export::{
+    ExportResult, ExportSelectedRequest, NamingRule, OutputRules, WatermarkExport,
+};
 use crate::processing::metadata::{apply_metadata_policy, read_image_description};
 use crate::processing::renderer::render_text_watermark;
 
@@ -17,8 +19,9 @@ pub fn export_selected_image(request: &ExportSelectedRequest) -> Result<ExportRe
     if !source_path.is_file() {
         return Err("Selected source image is not a readable file".to_string());
     }
-    if request.watermark.text.trim().is_empty() {
-        return Err("Watermark text is required before export".to_string());
+    let watermarks = renderable_watermarks(request);
+    if watermarks.is_empty() {
+        return Err("At least one visible watermark text is required before export".to_string());
     }
 
     let source_metadata = fs::metadata(&source_path)
@@ -36,7 +39,9 @@ pub fn export_selected_image(request: &ExportSelectedRequest) -> Result<ExportRe
     let width = image.width();
     let height = image.height();
 
-    render_text_watermark(&mut image, &request.watermark)?;
+    for watermark in watermarks {
+        render_text_watermark(&mut image, watermark)?;
+    }
 
     let output_path = next_output_path(&source_path, &request.output_rules, request.index)?;
     write_image(&output_path, DynamicImage::ImageRgba8(image))?;
@@ -64,6 +69,26 @@ pub fn export_selected_image(request: &ExportSelectedRequest) -> Result<ExportRe
         width,
         height,
     })
+}
+
+pub fn renderable_watermarks(request: &ExportSelectedRequest) -> Vec<&WatermarkExport> {
+    let mut watermarks: Vec<&WatermarkExport> = request
+        .watermarks
+        .iter()
+        .filter(|watermark| watermark.is_renderable())
+        .collect();
+
+    if watermarks.is_empty() {
+        if let Some(watermark) = request
+            .watermark
+            .as_ref()
+            .filter(|watermark| watermark.is_renderable())
+        {
+            watermarks.push(watermark);
+        }
+    }
+
+    watermarks
 }
 
 pub(crate) fn load_source_image(source_path: &Path) -> Result<DynamicImage, String> {
@@ -161,11 +186,11 @@ mod tests {
             .save(&source)
             .unwrap();
         let mut request = request(source.to_string_lossy().as_ref());
-        request.watermark.text = "   ".to_string();
+        request.watermarks[0].text = "   ".to_string();
 
         let error = export_selected_image(&request).unwrap_err();
 
-        assert!(error.contains("Watermark text is required"));
+        assert!(error.contains("At least one visible watermark text is required"));
     }
 
     #[test]
@@ -218,7 +243,8 @@ mod tests {
                 source.to_string_lossy().to_string(),
                 missing.to_string_lossy().to_string(),
             ],
-            watermark: request(source.to_string_lossy().as_ref()).watermark,
+            watermark: None,
+            watermarks: request(source.to_string_lossy().as_ref()).watermarks,
             output_rules: Default::default(),
         });
 
@@ -227,6 +253,57 @@ mod tests {
         assert_eq!(result.results.len(), 2);
         assert!(result.results[0].success);
         assert!(!result.results[1].success);
+    }
+
+    #[test]
+    fn exports_multiple_visible_watermarks() {
+        let dir = test_dir("multi_watermarks");
+        fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("sample.png");
+        ImageBuffer::from_pixel(180, 140, Rgba([12_u8, 16, 20, 255]))
+            .save(&source)
+            .unwrap();
+
+        let mut request = request(source.to_string_lossy().as_ref());
+        request.watermarks = vec![
+            WatermarkExport {
+                color: "#ff0000".to_string(),
+                text: "One".to_string(),
+                x: 0.12,
+                y: 0.22,
+                anchor: WatermarkAnchor::Center,
+                font_size_px: 32.0,
+                opacity: 1.0,
+                ..request.watermarks[0].clone()
+            },
+            WatermarkExport {
+                color: "#0066ff".to_string(),
+                text: "Two".to_string(),
+                x: 0.78,
+                y: 0.75,
+                anchor: WatermarkAnchor::Center,
+                font_size_px: 32.0,
+                opacity: 1.0,
+                ..request.watermarks[0].clone()
+            },
+        ];
+
+        let result = export_selected_image(&request).unwrap();
+        let output = image::open(&result.output_path).unwrap().to_rgba8();
+        let mut red_pixels = 0;
+        let mut blue_pixels = 0;
+        for pixel in output.pixels() {
+            let [red, green, blue, alpha] = pixel.0;
+            if alpha > 0 && red > 140 && green < 90 && blue < 90 {
+                red_pixels += 1;
+            }
+            if alpha > 0 && red < 90 && green < 150 && blue > 140 {
+                blue_pixels += 1;
+            }
+        }
+
+        assert!(red_pixels > 10, "expected red watermark pixels");
+        assert!(blue_pixels > 10, "expected blue watermark pixels");
     }
 
     #[test]
@@ -423,6 +500,7 @@ mod tests {
             let item_request = ExportSelectedRequest {
                 source_path: source_path.clone(),
                 watermark: request.watermark.clone(),
+                watermarks: request.watermarks.clone(),
                 output_rules: request.output_rules.clone(),
                 index: offset + 1,
             };
@@ -462,7 +540,9 @@ mod tests {
             source_path: source_path.to_string(),
             output_rules: Default::default(),
             index: 1,
-            watermark: WatermarkExport {
+            watermark: None,
+            watermarks: vec![WatermarkExport {
+                visible: true,
                 text: "@bntxx_".to_string(),
                 font_family: "Arial".to_string(),
                 color: "#ffffff".to_string(),
@@ -473,7 +553,7 @@ mod tests {
                 x: 0.5,
                 y: 0.92,
                 anchor: WatermarkAnchor::BottomCenter,
-            },
+            }],
         }
     }
 

@@ -27,7 +27,15 @@ pub fn export_batch(
     if request.source_paths.is_empty() {
         return Err("Import images before batch export".to_string());
     }
-    if request.watermark.text.trim().is_empty() {
+    let has_renderable_watermark = request
+        .watermarks
+        .iter()
+        .any(|watermark| watermark.is_renderable())
+        || request
+            .watermark
+            .as_ref()
+            .is_some_and(|watermark| watermark.is_renderable());
+    if !has_renderable_watermark {
         return Err("Watermark text is required before export".to_string());
     }
 
@@ -42,6 +50,7 @@ pub fn export_batch(
         let item_request = ExportSelectedRequest {
             source_path: source_path.clone(),
             watermark: request.watermark.clone(),
+            watermarks: request.watermarks.clone(),
             output_rules: request.output_rules.clone(),
             index: offset + 1,
         };

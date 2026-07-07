@@ -9,6 +9,7 @@ import { formatBytes } from "../lib/format";
 import { getPreviewDataUrl } from "../lib/ipc";
 import type { EditorStore } from "../stores/editorStore";
 import type { ImageAsset } from "../types/image";
+import type { WatermarkLayer } from "../types/watermark";
 
 type PreviewPaneProps = {
   asset: ImageAsset | null;
@@ -19,7 +20,7 @@ type PreviewPaneProps = {
 export function PreviewPane({ asset, editor, isImporting }: PreviewPaneProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
-  const overlayRef = useRef<HTMLSpanElement | null>(null);
+  const overlayRefs = useRef(new Map<string, HTMLButtonElement>());
   const dragRafRef = useRef<number | null>(null);
   const zoomFocusRef = useRef(false);
   const pendingPositionRef = useRef<{ x: number; y: number } | null>(null);
@@ -30,7 +31,11 @@ export function PreviewPane({ asset, editor, isImporting }: PreviewPaneProps) {
   const [activeGuides, setActiveGuides] = useState({ horizontal: false, vertical: false });
   const [manualZoomPercent, setManualZoomPercent] = useState<number | null>(null);
   const [showWatermark, setShowWatermark] = useState(true);
-  const watermarkText = editor.watermark.text.trim();
+  const visibleWatermarks = editor.watermarks.filter(
+    (watermark) => watermark.visible && watermark.text.trim().length > 0,
+  );
+  const selectedWatermark = editor.watermark;
+  const watermarkText = visibleWatermarks.map((watermark) => watermark.text.trim()).join(" ");
   const fitPercent = asset
     ? fitZoomPercent(asset.width, asset.height, stageSize.width, stageSize.height)
     : 100;
@@ -81,8 +86,8 @@ export function PreviewPane({ asset, editor, isImporting }: PreviewPaneProps) {
   useLayoutEffect(() => {
     if (!zoomFocusRef.current) return;
     zoomFocusRef.current = false;
-    centerStageOnWatermark(stageRef.current, frameRef.current, editor.watermark.x, editor.watermark.y);
-  }, [frameSize.height, frameSize.width, editor.watermark.x, editor.watermark.y]);
+    centerStageOnWatermark(stageRef.current, frameRef.current, selectedWatermark.x, selectedWatermark.y);
+  }, [frameSize.height, frameSize.width, selectedWatermark.x, selectedWatermark.y]);
 
   useEffect(() => {
     return () => {
@@ -110,13 +115,17 @@ export function PreviewPane({ asset, editor, isImporting }: PreviewPaneProps) {
     return () => observer.disconnect();
   }, []);
 
-  function handlePointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+  function handlePointerDown(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    targetLayer: WatermarkLayer = selectedWatermark,
+  ) {
     const activeFrame = frameRef.current;
     if (!activeFrame) return;
     const frameElement = activeFrame;
 
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    editor.selectWatermark(targetLayer.id);
 
     function updatePosition(clientX: number, clientY: number) {
       const rect = frameElement.getBoundingClientRect();
@@ -139,12 +148,13 @@ export function PreviewPane({ asset, editor, isImporting }: PreviewPaneProps) {
         y: rawY,
       };
 
-      if (overlayRef.current) {
-        overlayRef.current.style.left = `${rawX * 100}%`;
-        overlayRef.current.style.top = `${rawY * 100}%`;
-        overlayRef.current.style.transform = overlayTransform(
-          editor.watermark.anchor,
-          editor.watermark.rotationDegrees,
+      const overlay = overlayRefs.current.get(targetLayer.id);
+      if (overlay) {
+        overlay.style.left = `${rawX * 100}%`;
+        overlay.style.top = `${rawY * 100}%`;
+        overlay.style.transform = overlayTransform(
+          targetLayer.anchor,
+          targetLayer.rotationDegrees,
         );
       }
 
@@ -163,7 +173,7 @@ export function PreviewPane({ asset, editor, isImporting }: PreviewPaneProps) {
     function handlePointerUp() {
       const position = pendingPositionRef.current;
       if (position) {
-        editor.setPosition(position.x, position.y);
+        editor.setWatermarkPosition(targetLayer.id, position.x, position.y);
       }
       pendingPositionRef.current = null;
       activeGuidesRef.current = { horizontal: false, vertical: false };
@@ -242,40 +252,46 @@ export function PreviewPane({ asset, editor, isImporting }: PreviewPaneProps) {
               src={previewSrc}
               alt={`Preview of ${asset.filename}`}
             />
-            {watermarkText && showWatermark && (
+            {visibleWatermarks.length > 0 && showWatermark && (
               <button
                 className="watermark-drag-surface"
                 type="button"
                 onPointerDown={handlePointerDown}
-                title="Click or drag to place watermark"
+                title="Click or drag to place selected watermark"
               />
             )}
             {activeGuides.vertical && showWatermark && <span className="alignment-guide vertical" />}
             {activeGuides.horizontal && showWatermark && <span className="alignment-guide horizontal" />}
-            {watermarkText && showWatermark && (
-              <span
-                className="watermark-live-overlay"
-                ref={overlayRef}
+            {visibleWatermarks.length > 0 && showWatermark && visibleWatermarks.map((layer) => (
+              <button
+                className={`watermark-live-overlay ${
+                  layer.id === editor.selectedWatermarkId ? "selected" : ""
+                }`}
+                key={layer.id}
+                ref={(element) => {
+                  if (element) {
+                    overlayRefs.current.set(layer.id, element);
+                  } else {
+                    overlayRefs.current.delete(layer.id);
+                  }
+                }}
                 style={{
-                  color: editor.watermark.color,
-                  fontFamily: fontStack(editor.watermark.fontFamily),
-                  fontSize: `${Math.max(
-                    12,
-                    editor.watermark.fontSizePx * previewScale,
-                  )}px`,
-                  left: `${editor.watermark.x * 100}%`,
-                  opacity: editor.watermark.opacity,
-                  top: `${editor.watermark.y * 100}%`,
-                  transform: overlayTransform(
-                    editor.watermark.anchor,
-                    editor.watermark.rotationDegrees,
-                  ),
+                  color: layer.color,
+                  fontFamily: fontStack(layer.fontFamily),
+                  fontSize: `${Math.max(12, layer.fontSizePx * previewScale)}px`,
+                  left: `${layer.x * 100}%`,
+                  opacity: layer.opacity,
+                  top: `${layer.y * 100}%`,
+                  transform: overlayTransform(layer.anchor, layer.rotationDegrees),
                   transformOrigin: "center",
                 }}
+                title={`Select ${layer.name}`}
+                type="button"
+                onPointerDown={(event) => handlePointerDown(event, layer)}
               >
-                {watermarkText}
-              </span>
-            )}
+                {layer.text.trim()}
+              </button>
+            ))}
           </div>
         ) : asset ? (
           <div className="empty-preview">

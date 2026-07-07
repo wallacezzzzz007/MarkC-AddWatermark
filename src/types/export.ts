@@ -1,9 +1,10 @@
-import type { WatermarkDraft } from "./watermark";
+import type { WatermarkDraft, WatermarkLayer } from "./watermark";
 import type { OutputRules } from "./output";
 
 export type ExportSelectedRequest = {
   sourcePath: string;
-  watermark: WatermarkDraft;
+  watermark?: WatermarkDraft;
+  watermarks?: WatermarkLayer[];
   outputRules?: OutputRules;
   index?: number;
 };
@@ -17,7 +18,8 @@ export type ExportResult = {
 
 export type BatchExportRequest = {
   sourcePaths: string[];
-  watermark: WatermarkDraft;
+  watermark?: WatermarkDraft;
+  watermarks: WatermarkLayer[];
   outputRules: OutputRules;
 };
 

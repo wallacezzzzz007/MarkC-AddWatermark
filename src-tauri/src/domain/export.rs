@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct ExportSelectedRequest {
     pub source_path: String,
-    pub watermark: WatermarkExport,
+    #[serde(default)]
+    pub watermark: Option<WatermarkExport>,
+    #[serde(default)]
+    pub watermarks: Vec<WatermarkExport>,
     #[serde(default)]
     pub output_rules: OutputRules,
     #[serde(default = "default_index")]
@@ -14,6 +17,8 @@ pub struct ExportSelectedRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WatermarkExport {
+    #[serde(default = "default_visible")]
+    pub visible: bool,
     pub text: String,
     #[serde(default = "default_font_family")]
     pub font_family: String,
@@ -57,7 +62,10 @@ pub struct ExportResult {
 #[serde(rename_all = "camelCase")]
 pub struct BatchExportRequest {
     pub source_paths: Vec<String>,
-    pub watermark: WatermarkExport,
+    #[serde(default)]
+    pub watermark: Option<WatermarkExport>,
+    #[serde(default)]
+    pub watermarks: Vec<WatermarkExport>,
     pub output_rules: OutputRules,
 }
 
@@ -147,6 +155,34 @@ impl Default for MetadataPolicy {
 
 fn default_custom_prefix() -> String {
     "watermark".to_string()
+}
+
+fn default_visible() -> bool {
+    true
+}
+
+impl WatermarkExport {
+    pub fn is_renderable(&self) -> bool {
+        self.visible && !self.text.trim().is_empty()
+    }
+}
+
+impl Default for WatermarkExport {
+    fn default() -> Self {
+        Self {
+            visible: true,
+            text: String::new(),
+            font_family: default_font_family(),
+            color: "#ffffff".to_string(),
+            opacity: 1.0,
+            font_size_px: 0.0,
+            font_size_percent: 3.2,
+            rotation_degrees: 0.0,
+            x: 0.5,
+            y: 0.5,
+            anchor: WatermarkAnchor::Center,
+        }
+    }
 }
 
 fn default_font_family() -> String {
